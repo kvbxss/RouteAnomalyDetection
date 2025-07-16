@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+venv/
+.env
+
+# Django
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+logs/
+
+# React/Node
+node_modules/
+build/
+dist/
+.env.local
+
+# Docker
+*.pid
+docker-compose.override.yml
+
+# VSCode/IDE
+.vscode/
+.idea/
+*.swp
+
+# System
+.DS_Store
+Thumbs.db
+
+# Kiro
+.kiro/ 
