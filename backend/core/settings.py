@@ -1,9 +1,3 @@
-# ---
-# To use different settings for development and production:
-# 1. Set the environment variable DJANGO_ENV to 'production' or 'development'.
-# 2. By default, development settings are used.
-# 3. You can further split this file into settings_dev.py and settings_prod.py if needed.
-# ---
 """
 Django settings for core project.
 
