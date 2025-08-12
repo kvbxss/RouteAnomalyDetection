@@ -18,11 +18,13 @@ A full‑stack system for ingesting ADS‑B flight data, detecting route anomali
 ## Quick Start
 
 ### Prerequisites
+
 - Python 3.10+
 - Node.js 18+ (Node 20 LTS recommended)
 - Mapbox account/token (for map visualization)
 
 ### Backend
+
 ```bash
 # From project root
 cd backend
@@ -42,6 +44,7 @@ python manage.py runserver 8000
 - Swagger: `http://127.0.0.1:8000/swagger/`
 
 ### Frontend
+
 ```bash
 # In another terminal, from project root
 cd frontend
@@ -51,6 +54,7 @@ npm i
 # VITE_MAPBOX_TOKEN=pk.your_mapbox_access_token_here
 npm run dev
 ```
+
 - App: `http://localhost:5173`
 
 ## Core Endpoints (Backend)
@@ -67,6 +71,7 @@ npm run dev
   - `GET /api/data-sources/`
 
 ## Frontend Pages
+
 - Dashboard – quick actions (Upload Flight Data, Train Model, Run Detection)
 - Flights – CSV upload & filters (WIP wiring to list)
 - Anomalies – filters and model controls (WIP wiring to list)
@@ -76,6 +81,7 @@ npm run dev
 ## ML Pipeline (Management Commands)
 
 From `backend/`:
+
 ```bash
 # Train the model
 python manage.py train_anomaly_model --contamination 0.15 --save-model
@@ -127,6 +133,7 @@ python manage.py detect_anomalies --min-confidence 0.8
   - `npm run preview`
 
 ## Roadmap
+
 - Wire flights/anomalies lists in UI
 - Show anomalies as overlays on Mapbox (points/lines)
 - Auth (JWT) enablement and protected routes
@@ -134,4 +141,5 @@ python manage.py detect_anomalies --min-confidence 0.8
 - RAG chatbot backend and vector DB integration
 
 ## License
+
 MIT (see `LICENSE` if present).
