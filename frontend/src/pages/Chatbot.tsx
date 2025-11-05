@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
+import { Send } from "lucide-react";
 
 const Chatbot = () => {
   const [message, setMessage] = useState("");
@@ -25,7 +26,7 @@ const Chatbot = () => {
           {
             type: "bot",
             content:
-              "I understand you're asking about: \"" +
+              'I understand you\'re asking about: "' +
               message +
               '". This will be connected to the RAG system soon!',
           },
@@ -44,20 +45,18 @@ const Chatbot = () => {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-widest uppercase">
-          AI Chatbot
-        </h1>
+        <h1 className="text-2xl font-semibold tracking-tight">AI Assistant</h1>
         <p className="text-sm text-muted-foreground">
           Ask questions about flight anomalies and get intelligent responses
         </p>
       </div>
 
-      <Card className="flex h-[600px] flex-col">
+      <Card className="flex h-[calc(100vh-16rem)] flex-col">
         <CardHeader>
           <CardTitle>Flight Anomaly Assistant</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-1 flex-col">
-          <div className="mb-4 flex-1 space-y-4 overflow-y-auto rounded-lg bg-muted/20 p-4">
+          <div className="mb-4 flex-1 space-y-3 overflow-y-auto rounded-lg bg-muted/30 p-4">
             {chatHistory.map((chat, index) => (
               <div
                 key={index}
@@ -66,7 +65,7 @@ const Chatbot = () => {
                 }`}
               >
                 <div
-                  className={`max-w-xs rounded-lg px-4 py-2 text-sm md:max-w-md ${
+                  className={`max-w-[70%] rounded-lg px-4 py-2.5 text-sm ${
                     chat.type === "user"
                       ? "bg-primary text-primary-foreground"
                       : "border bg-card text-foreground"
@@ -88,10 +87,16 @@ const Chatbot = () => {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ask about anomalies, routes, or detection results…"
+                placeholder="Ask about anomalies, routes, or detection results..."
+                className="h-10"
               />
             </div>
-            <Button onClick={handleSendMessage} disabled={!message.trim()}>
+            <Button
+              onClick={handleSendMessage}
+              disabled={!message.trim()}
+              className="gap-2"
+            >
+              <Send className="h-4 w-4" />
               Send
             </Button>
           </div>

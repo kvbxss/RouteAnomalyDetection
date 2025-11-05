@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DataTable, Column } from "@/components/ui/data-table";
 import {
   Select,
   SelectContent,
@@ -10,33 +11,111 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useState } from "react";
-import { uploadCSV } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { uploadCSV, getJSON } from "@/lib/api";
+import { toast } from "sonner";
+import { Upload, RotateCcw } from "lucide-react";
+
+interface Flight {
+  id: number;
+  flight_id: string;
+  icao24: string;
+  departure_airport: string;
+  arrival_airport: string;
+  first_seen: string;
+  last_seen: string;
+  route_geometry: any;
+}
 
 const Flights = () => {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState({
+    origin: "",
+    destination: "",
+    aircraft: "",
+  });
+  const queryClient = useQueryClient();
+
+  const { data: flightsData, isLoading } = useQuery({
+    queryKey: ["flights", filters],
+    queryFn: () => {
+      let url = "/api/flights/?page_size=100";
+      if (filters.origin) url += `&departure_airport=${filters.origin}`;
+      if (filters.destination) url += `&arrival_airport=${filters.destination}`;
+      if (filters.aircraft) url += `&icao24=${filters.aircraft}`;
+      return getJSON<{ count: number; results: Flight[] }>(url);
+    },
+  });
+
+  const flights = flightsData?.results || [];
 
   const onUpload = async () => {
     if (!file) return;
     setUploading(true);
-    setError(null);
-    setResult(null);
+    const toastId = toast.loading("Uploading and processing CSV...");
+
     try {
       const res = await uploadCSV(file);
-      setResult(res);
+      toast.success(
+        `Processed ${res.processed_count} flights successfully`,
+        { id: toastId }
+      );
+      setFile(null);
+      queryClient.invalidateQueries({ queryKey: ["flights"] });
     } catch (e: any) {
-      setError(e?.message || "Upload failed");
+      toast.error(e?.message || "Upload failed", { id: toastId });
     } finally {
       setUploading(false);
     }
   };
 
+  const handleFilterChange = (key: string, value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const clearFilters = () => {
+    setFilters({ origin: "", destination: "", aircraft: "" });
+  };
+
+  const columns: Column<Flight>[] = [
+    {
+      header: "Flight ID",
+      accessor: "flight_id",
+      className: "font-medium",
+    },
+    {
+      header: "Aircraft",
+      accessor: "icao24",
+    },
+    {
+      header: "Origin",
+      accessor: "departure_airport",
+    },
+    {
+      header: "Destination",
+      accessor: "arrival_airport",
+    },
+    {
+      header: "First Seen",
+      accessor: (row) => {
+        const date = new Date(row.first_seen);
+        return date.toLocaleString();
+      },
+    },
+    {
+      header: "Last Seen",
+      accessor: (row) => {
+        const date = new Date(row.last_seen);
+        return date.toLocaleString();
+      },
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-widest uppercase">
+        <h1 className="text-2xl font-semibold tracking-tight">
           Flight Management
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -75,23 +154,14 @@ const Flights = () => {
               </Select>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Button
-              className="w-full md:w-auto"
-              onClick={onUpload}
-              disabled={!file || uploading}
-            >
-              {uploading ? "Uploading..." : "📁 Upload and Process"}
-            </Button>
-            {error && <span className="text-sm text-red-400">{error}</span>}
-          </div>
-          {result && (
-            <div className="text-sm text-muted-foreground">
-              <div>Processed: {result.processed_count}</div>
-              <div>Errors: {result.error_count}</div>
-              <div>Warnings: {result.warning_count}</div>
-            </div>
-          )}
+          <Button
+            className="gap-2"
+            onClick={onUpload}
+            disabled={!file || uploading}
+          >
+            <Upload className="h-4 w-4" />
+            {uploading ? "Uploading..." : "Upload and Process"}
+          </Button>
         </CardContent>
       </Card>
 
@@ -104,19 +174,44 @@ const Flights = () => {
           <div className="grid gap-4 md:grid-cols-4">
             <div>
               <Label htmlFor="origin">Origin</Label>
-              <Input id="origin" placeholder="e.g., LAX" />
+              <Input
+                id="origin"
+                placeholder="e.g., KJFK"
+                value={filters.origin}
+                onChange={(e) => handleFilterChange("origin", e.target.value)}
+              />
             </div>
             <div>
               <Label htmlFor="destination">Destination</Label>
-              <Input id="destination" placeholder="e.g., JFK" />
-            </div>
-            <div>
-              <Label htmlFor="date-range">Date</Label>
-              <Input id="date-range" type="date" />
+              <Input
+                id="destination"
+                placeholder="e.g., KLAX"
+                value={filters.destination}
+                onChange={(e) =>
+                  handleFilterChange("destination", e.target.value)
+                }
+              />
             </div>
             <div>
               <Label htmlFor="aircraft">Aircraft ID</Label>
-              <Input id="aircraft" placeholder="e.g., N12345" />
+              <Input
+                id="aircraft"
+                placeholder="e.g., a12345"
+                value={filters.aircraft}
+                onChange={(e) =>
+                  handleFilterChange("aircraft", e.target.value)
+                }
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 gap-2"
+                onClick={clearFilters}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -125,13 +220,22 @@ const Flights = () => {
       {/* Flight List */}
       <Card>
         <CardHeader>
-          <CardTitle>Flight Records</CardTitle>
+          <CardTitle>
+            Flight Records
+            {flightsData?.count !== undefined && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                ({flightsData.count} total)
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="py-8 text-center text-muted-foreground">
-            <p>No flights found</p>
-            <p className="text-xs">Upload some flight data to get started</p>
-          </div>
+          <DataTable
+            data={flights}
+            columns={columns}
+            loading={isLoading}
+            emptyMessage="No flights found. Upload flight data to get started."
+          />
         </CardContent>
       </Card>
     </div>
