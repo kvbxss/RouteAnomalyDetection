@@ -5,7 +5,8 @@
       "Bash(dir:*)",
       "Bash(python manage.py makemigrations:*)",
       "Bash(python manage.py migrate:*)",
-      "Bash(timeout 60 python:*)"
+      "Bash(timeout 60 python:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []
