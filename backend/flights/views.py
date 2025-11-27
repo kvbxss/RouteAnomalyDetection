@@ -2,7 +2,7 @@ from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FileUploadParser
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 from django.utils import timezone
@@ -11,14 +11,24 @@ from .models import Flight, AnomalyDetection, DataSource
 from .serializers import FlightSerializer, AnomalyDetectionSerializer, DataSourceSerializer
 from .utils import FlightDataIngestion, CSVDataParser
 from .ml_pipeline import AnomalyDetectionModel, AnomalyDetectionPipeline
+from .permissions import IsAdminOrReadOnly, CanManageFlightData, CanRunMLOperations
 
 logger = logging.getLogger(__name__)
 
 
 class FlightViewSet(viewsets.ModelViewSet):
-    """ViewSet for Flight model with full CRUD operations"""
+    """
+    ViewSet for Flight model with full CRUD operations.
+
+    Permissions:
+    - Read operations: Authenticated users
+    - Write operations (create, update, delete): Admin users only
+    - upload_csv: Users with 'can_manage_flight_data' permission
+    - validate_csv: Users with 'can_manage_flight_data' permission
+    """
     queryset = Flight.objects.all()
     serializer_class = FlightSerializer
+    permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['origin', 'destination', 'aircraft_id']
     search_fields = ['flight_id', 'aircraft_id', 'origin', 'destination']
@@ -49,12 +59,19 @@ class FlightViewSet(viewsets.ModelViewSet):
         serializer = AnomalyDetectionSerializer(anomalies, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser], permission_classes=[AllowAny])
+    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser], permission_classes=[CanManageFlightData])
     def upload_csv(self, request):
         """
-        Upload and process CSV file containing flight data
-        
-        Expected file format: CSV with headers including lat/latitude, lon/longitude, etc.
+        Upload and process CSV file containing flight data.
+
+        **Permissions:** Requires `can_manage_flight_data` permission or admin status.
+
+        **Request:** Multipart form data with 'file' field containing CSV.
+
+        **Expected CSV format:** Headers including lat/latitude, lon/longitude,
+        flight_id, aircraft_id, timestamp, altitude, speed, heading.
+
+        **Returns:** Processing summary with created flight count, errors, and warnings.
         """
         try:
             # Validate file upload
@@ -147,12 +164,18 @@ class FlightViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser], permission_classes=[AllowAny])
+    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser], permission_classes=[CanManageFlightData])
     def validate_csv(self, request):
         """
-        Validate CSV file format without processing the data
-        
-        This endpoint allows users to check if their CSV file is valid before uploading
+        Validate CSV file format without processing the data.
+
+        **Permissions:** Requires `can_manage_flight_data` permission or admin status.
+
+        **Request:** Multipart form data with 'file' field containing CSV.
+
+        **Returns:** Validation result with file info, detected headers, and any errors/warnings.
+
+        This endpoint allows users to check if their CSV file is valid before uploading.
         """
         try:
             if 'file' not in request.FILES:
@@ -215,9 +238,18 @@ class FlightViewSet(viewsets.ModelViewSet):
 
 
 class AnomalyDetectionViewSet(viewsets.ModelViewSet):
-    """ViewSet for AnomalyDetection model"""
+    """
+    ViewSet for AnomalyDetection model with filtering and ML operations.
+
+    Permissions:
+    - Read operations: Authenticated users
+    - Write operations: Admin users only
+    - train_model: Users with 'can_run_ml_operations' permission
+    - detect_anomalies: Users with 'can_run_ml_operations' permission
+    """
     queryset = AnomalyDetection.objects.all()
     serializer_class = AnomalyDetectionSerializer
+    permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['anomaly_type', 'is_reviewed', 'is_false_positive']
     search_fields = ['flight__flight_id', 'flight__aircraft_id']
@@ -297,9 +329,20 @@ class AnomalyDetectionViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(anomaly)
         return Response(serializer.data)
     
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    @action(detail=False, methods=['post'], permission_classes=[CanRunMLOperations])
     def train_model(self, request):
-        """Train the anomaly detection model"""
+        """
+        Train the anomaly detection model.
+
+        **Permissions:** Requires `can_run_ml_operations` permission or admin status.
+
+        **Request body:**
+        - contamination (float, optional): Expected proportion of anomalies (default: 0.1)
+        - flight_limit (int, optional): Limit number of flights for training
+        - save_model (bool, optional): Whether to save the trained model
+
+        **Returns:** Training results with sample count, performance metrics, and model path if saved.
+        """
         try:
             contamination = float(request.data.get('contamination', 0.1))
             flight_limit = request.data.get('flight_limit')
@@ -334,9 +377,19 @@ class AnomalyDetectionViewSet(viewsets.ModelViewSet):
             logger.error(error_msg, exc_info=True)
             return Response({'error': error_msg}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    @action(detail=False, methods=['post'], permission_classes=[CanRunMLOperations])
     def detect_anomalies(self, request):
-        """Run anomaly detection on flights"""
+        """
+        Run anomaly detection on flights.
+
+        **Permissions:** Requires `can_run_ml_operations` permission or admin status.
+
+        **Request body:**
+        - flight_ids (array, optional): Specific flight IDs to analyze (if empty, analyzes all)
+        - retrain (bool, optional): Whether to retrain the model before detection
+
+        **Returns:** Detection results with anomaly count and details.
+        """
         try:
             flight_ids = request.data.get('flight_ids', [])
             retrain_model = request.data.get('retrain', False)
@@ -367,9 +420,16 @@ class AnomalyDetectionViewSet(viewsets.ModelViewSet):
 
 
 class DataSourceViewSet(viewsets.ModelViewSet):
-    """ViewSet for DataSource model"""
+    """
+    ViewSet for DataSource model to manage data source configurations.
+
+    Permissions:
+    - Read operations: Authenticated users
+    - Write operations: Admin users only
+    """
     queryset = DataSource.objects.all()
     serializer_class = DataSourceSerializer
+    permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['source_type', 'is_active']
     search_fields = ['name']

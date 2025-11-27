@@ -6,6 +6,8 @@ import io
 import tempfile
 from datetime import datetime
 from django.test import TestCase
+from django.contrib.auth.models import User, Permission
+from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APITestCase
@@ -317,9 +319,22 @@ data1,data2"""
 
 class CSVUploadAPITestCase(APITestCase):
     """Test cases for CSV upload API endpoints"""
-    
+
     def setUp(self):
         """Set up test data"""
+        # Create user with flight management permission
+        self.flight_manager = User.objects.create_user(
+            username='flight_manager',
+            password='password123'
+        )
+        content_type = ContentType.objects.get_for_model(Flight)
+        permission = Permission.objects.get(
+            content_type=content_type,
+            codename='can_manage_flight_data'
+        )
+        self.flight_manager.user_permissions.add(permission)
+        self.client.force_authenticate(user=self.flight_manager)
+
         self.valid_csv_content = b"""flight_id,aircraft_id,timestamp,lat,lon,altitude,speed,heading
 FL001,AC001,2024-01-01 10:00:00,52.0,21.0,10000,450,90
 FL002,AC002,2024-01-01 11:00:00,52.1,21.1,10020,455,95"""

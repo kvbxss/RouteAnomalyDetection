@@ -237,26 +237,48 @@ class AnomalyDetectionModel:
             # Train the model
             self.model.fit(features_scaled)
             self.is_fitted = True
-            
-            # Evaluate model using cross-validation
-            cv_scores = cross_val_score(self.model, features_scaled, cv=5, scoring='roc_auc', n_jobs=-1)
-            
+
+            # Evaluate model using unsupervised metrics
+            # Predict anomaly scores for evaluation
+            predictions = self.model.predict(features_scaled)
+            anomaly_scores = self.model.decision_function(features_scaled)
+
+            # Calculate unsupervised quality metrics
+            from sklearn.metrics import silhouette_score
+
+            # Silhouette score (measures cluster quality, -1 to 1, higher is better)
+            try:
+                silhouette = silhouette_score(features_scaled, predictions)
+            except:
+                silhouette = 0.0
+
+            # Count anomalies detected
+            n_anomalies = (predictions == -1).sum()
+            anomaly_percentage = (n_anomalies / len(predictions)) * 100
+
+            # Anomaly score statistics
+            anomaly_score_mean = anomaly_scores.mean()
+            anomaly_score_std = anomaly_scores.std()
+
             training_time = (timezone.now() - start_time).total_seconds()
-            
+
             results = {
                 'success': True,
                 'training_samples': len(features_df),
                 'features_count': len(self.feature_extractor.feature_names),
                 'feature_names': self.feature_extractor.feature_names,
-                'cv_auc_mean': cv_scores.mean(),
-                'cv_auc_std': cv_scores.std(),
+                'silhouette_score': float(silhouette),
+                'anomalies_detected': int(n_anomalies),
+                'anomaly_percentage': float(anomaly_percentage),
+                'anomaly_score_mean': float(anomaly_score_mean),
+                'anomaly_score_std': float(anomaly_score_std),
                 'contamination': self.contamination,
                 'model_version': self.model_version,
                 'training_time_seconds': training_time
             }
-            
+
             logger.info(f"Model training completed successfully in {training_time:.2f}s. "
-                       f"CV AUC: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+                       f"Silhouette: {silhouette:.3f}, Anomalies: {n_anomalies} ({anomaly_percentage:.1f}%)")
             
             return results
             
@@ -297,7 +319,61 @@ class AnomalyDetectionModel:
         confidence_scores = 1 / (1 + np.exp(anomaly_scores))  # Sigmoid transformation
         
         return is_anomaly, confidence_scores
-    
+
+    def get_feature_importance(self, flights_df: pd.DataFrame = None) -> dict:
+        """
+        Calculate feature importance by analyzing anomaly score variance.
+
+        For Isolation Forest, we approximate importance by measuring how much
+        each feature contributes to the anomaly score variance.
+
+        Args:
+            flights_df: Optional DataFrame for analysis (uses training data if None)
+
+        Returns:
+            Dictionary with feature names and importance scores
+        """
+        if not self.is_fitted:
+            raise ValueError("Model must be trained before analyzing feature importance")
+
+        # Use provided data or generate from feature extractor
+        if flights_df is not None:
+            features_df = self.feature_extractor.extract_features(flights_df)
+            features_scaled = self.feature_extractor.transform_features(features_df)
+        else:
+            # Need data to calculate importance
+            raise ValueError("flights_df required for feature importance calculation")
+
+        # Get baseline anomaly scores
+        baseline_scores = self.model.decision_function(features_scaled)
+        baseline_var = np.var(baseline_scores)
+
+        feature_importance = {}
+
+        # For each feature, permute it and measure impact on score variance
+        for i, feature_name in enumerate(self.feature_extractor.feature_names):
+            # Create permuted version
+            features_permuted = features_scaled.copy()
+            np.random.shuffle(features_permuted[:, i])
+
+            # Get scores with permuted feature
+            permuted_scores = self.model.decision_function(features_permuted)
+            permuted_var = np.var(permuted_scores)
+
+            # Importance is the change in variance
+            importance = abs(baseline_var - permuted_var) / baseline_var if baseline_var > 0 else 0
+            feature_importance[feature_name] = float(importance)
+
+        # Normalize to sum to 1
+        total_importance = sum(feature_importance.values())
+        if total_importance > 0:
+            feature_importance = {k: v / total_importance for k, v in feature_importance.items()}
+
+        # Sort by importance
+        feature_importance = dict(sorted(feature_importance.items(), key=lambda x: x[1], reverse=True))
+
+        return feature_importance
+
     def save_model(self, filepath: str = None):
         """Save the trained model to disk"""
         if not self.is_fitted:
@@ -407,13 +483,25 @@ class AnomalyDetectionPipeline:
                     anomaly_type = self._classify_anomaly_type(flights_df.iloc[i], confidence)
                     
                     # Create anomaly detection record
+                    # Convert pandas row to serializable dict
+                    features_dict = {}
+                    for key, value in flights_df.iloc[i].to_dict().items():
+                        if pd.notna(value):
+                            # Convert pandas/numpy types to native Python types
+                            if hasattr(value, 'item'):
+                                features_dict[key] = value.item()
+                            elif isinstance(value, (pd.Timestamp, datetime)):
+                                features_dict[key] = value.isoformat()
+                            else:
+                                features_dict[key] = value
+
                     anomaly_detection = AnomalyDetection(
                         flight=flight_record,
                         anomaly_type=anomaly_type,
                         confidence_score=confidence,
                         ml_model_version=self.model.model_version,
                         anomaly_details={
-                            'features': flights_df.iloc[i].to_dict(),
+                            'features': features_dict,
                             'confidence_score': confidence,
                             'model_contamination': self.model.contamination,
                             'detection_timestamp': timezone.now().isoformat()

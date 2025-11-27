@@ -66,6 +66,10 @@ class Flight(models.Model):
             models.Index(fields=['timestamp']),
             models.Index(fields=['origin', 'destination']),
         ]
+        permissions = [
+            ('can_manage_flight_data', 'Can manage flight data uploads and processing'),
+            ('can_run_ml_operations', 'Can run machine learning operations'),
+        ]
 
     def __str__(self):
         return f"Flight {self.flight_id} - {self.aircraft_id}"

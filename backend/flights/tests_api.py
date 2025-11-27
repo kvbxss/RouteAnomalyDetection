@@ -1,5 +1,6 @@
 from django.urls import reverse
 from django.utils import timezone
+from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.test import APITestCase
 from .models import Flight, AnomalyDetection, DataSource
@@ -8,9 +9,13 @@ from .serializers import FlightSerializer, AnomalyDetectionSerializer, DataSourc
 
 class FlightAPITest(APITestCase):
     """Test cases for Flight API endpoints"""
-    
+
     def setUp(self):
         """Set up test data"""
+        # Create and authenticate an admin user (needed for write operations)
+        self.admin_user = User.objects.create_superuser(username='admin', password='admin123')
+        self.client.force_authenticate(user=self.admin_user)
+
         self.flight1 = Flight.objects.create(
             flight_id='TEST123',
             aircraft_id='N12345',
@@ -188,9 +193,13 @@ class FlightAPITest(APITestCase):
 
 class AnomalyDetectionAPITest(APITestCase):
     """Test cases for AnomalyDetection API endpoints"""
-    
+
     def setUp(self):
         """Set up test data"""
+        # Create and authenticate an admin user (needed for write operations)
+        self.admin_user = User.objects.create_superuser(username='admin', password='admin123')
+        self.client.force_authenticate(user=self.admin_user)
+
         self.flight = Flight.objects.create(
             flight_id='TEST123',
             aircraft_id='N12345',
@@ -344,9 +353,13 @@ class AnomalyDetectionAPITest(APITestCase):
 
 class DataSourceAPITest(APITestCase):
     """Test cases for DataSource API endpoints"""
-    
+
     def setUp(self):
         """Set up test data"""
+        # Create and authenticate an admin user (needed for data source operations)
+        self.admin_user = User.objects.create_superuser(username='admin', password='admin123')
+        self.client.force_authenticate(user=self.admin_user)
+
         self.data_source1 = DataSource.objects.create(
             name='Test ADS-B Feed',
             source_type='api_endpoint',
