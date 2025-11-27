@@ -4,7 +4,8 @@
       "Bash(python manage.py test:*)",
       "Bash(dir:*)",
       "Bash(python manage.py makemigrations:*)",
-      "Bash(python manage.py migrate:*)"
+      "Bash(python manage.py migrate:*)",
+      "Bash(timeout 60 python:*)"
     ],
     "deny": [],
     "ask": []
