@@ -9,11 +9,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { trainModel, runDetection, getJSON } from "@/lib/api";
 import { toast } from "sonner";
-import { Cpu, Activity, BarChart3 } from "lucide-react";
+import { Cpu, Activity, BarChart3, Eye, RefreshCw } from "lucide-react";
+import AnomalyStats from "@/components/AnomalyStats";
+import FlightDetailModal from "@/components/FlightDetailModal";
 
 interface Anomaly {
   id: number;
@@ -31,13 +33,37 @@ const Anomalies = () => {
   const [training, setTraining] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [contamination, setContamination] = useState("0.1");
+  const [selectedFlight, setSelectedFlight] = useState<any | null>(null);
+  const [selectedAnomalies, setSelectedAnomalies] = useState<Anomaly[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [previousCount, setPreviousCount] = useState(0);
   const queryClient = useQueryClient();
 
-  const { data: anomaliesData, isLoading } = useQuery({
+  const { data: anomaliesData, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["anomalies"],
     queryFn: () =>
       getJSON<{ count: number; results: Anomaly[] }>("/api/anomalies/"),
+    refetchInterval: autoRefresh ? 30000 : false, // Auto-refresh every 30 seconds
   });
+
+  // Update last updated timestamp and check for new anomalies
+  useEffect(() => {
+    if (anomaliesData && !isLoading) {
+      setLastUpdated(new Date());
+
+      // Show toast notification for new anomalies
+      const currentCount = anomaliesData.count || 0;
+      if (previousCount > 0 && currentCount > previousCount) {
+        const newCount = currentCount - previousCount;
+        toast.info(`${newCount} new anomal${newCount === 1 ? 'y' : 'ies'} detected!`, {
+          duration: 5000,
+        });
+      }
+      setPreviousCount(currentCount);
+    }
+  }, [anomaliesData, isLoading]);
 
   const anomalies = anomaliesData?.results || [];
 
@@ -77,6 +103,27 @@ const Anomalies = () => {
     }
   };
 
+  const handleViewAnomaly = (anomaly: Anomaly) => {
+    // Fetch the full flight details for this anomaly
+    setSelectedFlight(anomaly.flight);
+    setSelectedAnomalies([anomaly]);
+    setModalOpen(true);
+  };
+
+  const handleManualRefresh = async () => {
+    await refetch();
+    toast.success("Anomalies refreshed successfully");
+  };
+
+  const formatLastUpdated = (date: Date) => {
+    const now = new Date();
+    const diff = Math.floor((now.getTime() - date.getTime()) / 1000); // seconds
+
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    return date.toLocaleTimeString();
+  };
+
   const columns: Column<Anomaly>[] = [
     {
       header: "Flight ID",
@@ -111,9 +158,24 @@ const Anomalies = () => {
     {
       header: "Detected At",
       accessor: (row) => {
+        if (!row.detected_at) return "N/A";
         const date = new Date(row.detected_at);
-        return date.toLocaleString();
+        return isNaN(date.getTime()) ? "N/A" : date.toLocaleString();
       },
+    },
+    {
+      header: "Actions",
+      accessor: (row) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1"
+          onClick={() => handleViewAnomaly(row)}
+        >
+          <Eye className="h-3 w-3" />
+          View
+        </Button>
+      ),
     },
   ];
 
@@ -127,6 +189,9 @@ const Anomalies = () => {
           View and manage detected flight anomalies
         </p>
       </div>
+
+      {/* Anomaly Statistics */}
+      <AnomalyStats anomalies={anomalies} />
 
       {/* ML Model Controls */}
       <Card>
@@ -200,14 +265,45 @@ const Anomalies = () => {
       {/* Anomaly List */}
       <Card>
         <CardHeader>
-          <CardTitle>
-            Detected Anomalies
-            {anomaliesData?.count !== undefined && (
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                ({anomaliesData.count} total)
-              </span>
-            )}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>
+              Detected Anomalies
+              {anomaliesData?.count !== undefined && (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  ({anomaliesData.count} total)
+                </span>
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Last updated: {formatLastUpdated(lastUpdated)}</span>
+                {isFetching && !isLoading && (
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoRefresh}
+                    onChange={(e) => setAutoRefresh(e.target.checked)}
+                    className="rounded"
+                  />
+                  <span className="text-muted-foreground">Auto-refresh (30s)</span>
+                </label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={handleManualRefresh}
+                  disabled={isFetching}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <DataTable
@@ -218,6 +314,14 @@ const Anomalies = () => {
           />
         </CardContent>
       </Card>
+
+      {/* Flight Detail Modal with Anomaly Info */}
+      <FlightDetailModal
+        flight={selectedFlight}
+        anomalies={selectedAnomalies}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+      />
     </div>
   );
 };
