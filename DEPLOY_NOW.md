@@ -53,16 +53,53 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 
 ### Step 6: Create Admin User
 
-1. In Railway, go to your service
-2. Click "Settings" → "Connect" to open a shell
-3. Run:
+**Option A: Using Railway CLI (Recommended)**
+
+1. Install Railway CLI:
+```bash
+npm install -g @railway/cli
+```
+
+2. Login to Railway:
+```bash
+railway login
+```
+
+3. Link to your project:
+```bash
+cd d:/RouteAnomalyDetection
+railway link
+```
+Select your project from the list
+
+4. Open shell and create admin:
+```bash
+railway run python backend/manage.py createsuperuser
+```
+
+5. Enter username: `admin`
+6. Enter password: `admin123` (or your choice)
+7. Skip email (press Enter)
+
+**Option B: Using Railway Dashboard**
+
+1. In Railway, click on your backend service
+2. Look for the three dots menu (⋮) at the top right
+3. Select "Open Shell" or find it in the service menu
+4. In the shell, run:
 ```bash
 cd backend
 python manage.py createsuperuser
 ```
-4. Enter username: `admin`
-5. Enter password: `admin123` (or your choice)
-6. Skip email (press Enter)
+5. Enter username: `admin`
+6. Enter password: `admin123` (or your choice)
+
+**Option C: Create via Django Admin After First Deploy**
+
+You can also create the admin user later:
+1. Visit `https://your-app.railway.app/admin/`
+2. Use Railway shell (Options A or B above) to create user
+3. Or use the frontend to register first user
 
 ---
 
