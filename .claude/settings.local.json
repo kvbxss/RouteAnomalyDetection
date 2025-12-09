@@ -6,7 +6,20 @@
       "Bash(python manage.py makemigrations:*)",
       "Bash(python manage.py migrate:*)",
       "Bash(timeout 60 python:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(if not exist logs mkdir logs)",
+      "Bash(timeout 3 python:*)",
+      "Bash(curl:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(timeout 2 python:*)",
+      "Bash(python:*)",
+      "Bash(if [ -f .env ])",
+      "Bash(then cat .env)",
+      "Bash(else echo \"No .env file found\")",
+      "Bash(fi)",
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
