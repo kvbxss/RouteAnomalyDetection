@@ -90,20 +90,26 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-import dj_database_url
-
 # Database configuration
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 if DATABASE_URL:
     # Use PostgreSQL if DATABASE_URL is provided (Railway/Heroku/etc)
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=DATABASE_URL,
-            conn_max_age=600,
-            conn_health_checks=True,
+    try:
+        import dj_database_url
+        DATABASES = {
+            'default': dj_database_url.config(
+                default=DATABASE_URL,
+                conn_max_age=600,
+                conn_health_checks=True,
+            )
+        }
+    except ImportError:
+        # Fallback if dj_database_url not installed (shouldn't happen in production)
+        raise ImportError(
+            "dj_database_url is required for production. "
+            "Install it with: pip install dj-database-url"
         )
-    }
 else:
     # Use SQLite for local development
     DATABASES = {
