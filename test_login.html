@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Login</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <h1>Authentication Test</h1>
+
+    <div class="form-group">
+        <label for="apiBase">API Base URL:</label>
+        <input type="text" id="apiBase" value="http://127.0.0.1:8000">
+    </div>
+
+    <div class="form-group">
+        <label for="username">Username:</label>
+        <input type="text" id="username" value="admin">
+    </div>
+
+    <div class="form-group">
+        <label for="password">Password:</label>
+        <input type="password" id="password" value="admin123">
+    </div>
+
+    <button onclick="testLogin()">Test Login</button>
+    <button onclick="testProtectedEndpoint()">Test Protected Endpoint</button>
+    <button onclick="clearStorage()">Clear LocalStorage</button>
+
+    <div id="result"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = type;
+            resultDiv.textContent = message;
+        }
+
+        async function testLogin() {
+            const apiBase = document.getElementById('apiBase').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            log('Sending login request...', 'info');
+
+            try {
+                const response = await fetch(`${apiBase}/auth/token/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Store tokens
+                    localStorage.setItem('access_token', data.access);
+                    localStorage.setItem('refresh_token', data.refresh);
+
+                    log(`SUCCESS! Status: ${response.status}\n\n` +
+                        `Access Token: ${data.access.substring(0, 50)}...\n\n` +
+                        `Refresh Token: ${data.refresh.substring(0, 50)}...\n\n` +
+                        `Tokens saved to localStorage!`, 'success');
+                } else {
+                    log(`FAILED! Status: ${response.status}\n\n` +
+                        `Response:\n${JSON.stringify(data, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                log(`ERROR: ${error.message}\n\n` +
+                    `Make sure the backend is running at ${apiBase}`, 'error');
+            }
+        }
+
+        async function testProtectedEndpoint() {
+            const apiBase = document.getElementById('apiBase').value;
+            const accessToken = localStorage.getItem('access_token');
+
+            if (!accessToken) {
+                log('No access token found. Please login first.', 'error');
+                return;
+            }
+
+            log('Testing protected endpoint...', 'info');
+
+            try {
+                const response = await fetch(`${apiBase}/api/flights/?page_size=5`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    log(`SUCCESS! Status: ${response.status}\n\n` +
+                        `Flights count: ${data.count || 0}\n\n` +
+                        `Response:\n${JSON.stringify(data, null, 2).substring(0, 500)}...`, 'success');
+                } else {
+                    log(`FAILED! Status: ${response.status}\n\n` +
+                        `Response:\n${JSON.stringify(data, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                log(`ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        function clearStorage() {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            log('LocalStorage cleared!', 'success');
+        }
+
+        // Show current tokens on load
+        window.addEventListener('load', () => {
+            const accessToken = localStorage.getItem('access_token');
+            const refreshToken = localStorage.getItem('refresh_token');
+
+            if (accessToken) {
+                log(`Tokens found in localStorage:\n\n` +
+                    `Access: ${accessToken.substring(0, 50)}...\n` +
+                    `Refresh: ${refreshToken ? refreshToken.substring(0, 50) + '...' : 'None'}`, 'info');
+            }
+        });
+    </script>
+</body>
+</html>
