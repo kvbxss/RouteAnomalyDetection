@@ -1,12 +1,15 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Plane,
   TriangleAlert,
   Map as MapIcon,
   Bot,
+  LogOut,
 } from "lucide-react";
 import { JSX } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -16,6 +19,13 @@ type NavItem = { name: string; href: string; icon: JSX.Element };
 
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   const navigation: NavItem[] = [
     { name: "Dashboard", href: "/", icon: <LayoutDashboard size={16} /> },
@@ -78,6 +88,15 @@ const Layout = ({ children }: LayoutProps) => {
               <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
               <span>Online</span>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <LogOut size={14} />
+              <span className="text-xs">Logout</span>
+            </Button>
           </div>
         </div>
       </header>

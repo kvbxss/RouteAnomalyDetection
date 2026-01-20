@@ -1,0 +1,14 @@
+frontend/
+node_modules/
+.git/
+*.md
+.env.local
+.vscode/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.sqlite3
+db.sqlite3
+*.log

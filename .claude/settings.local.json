@@ -5,9 +5,6 @@
       "Bash(dir:*)",
       "Bash(python manage.py makemigrations:*)",
       "Bash(python manage.py migrate:*)",
-<<<<<<< Updated upstream
-      "Bash(timeout 60 python:*)"
-=======
       "Bash(timeout 60 python:*)",
       "Bash(npm run build:*)",
       "Bash(if not exist logs mkdir logs)",
@@ -27,7 +24,6 @@
       "Bash(if [ -f runtime.txt ])",
       "Bash(then cat runtime.txt)",
       "Bash(else echo \"File does not exist\")"
->>>>>>> Stashed changes
     ],
     "deny": [],
     "ask": []
