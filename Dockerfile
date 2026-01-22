@@ -9,8 +9,6 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Create logs dir early so Django logging doesn't crash
-RUN mkdir -p /app/logs
 
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
