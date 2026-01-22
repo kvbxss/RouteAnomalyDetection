@@ -306,25 +306,25 @@ LOGGING = {
             'style': '{',
         },
     },
-    'handlers': {
-        'file': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'django.log',
-            'formatter': 'verbose',
-        },
-        'console': {
-            'level': 'INFO',
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
-        },
-        'ml_file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'ml_pipeline.log',
-            'formatter': 'verbose',
-        },
+ 'handlers': {
+    'file': {
+        'level': 'INFO',
+        'class': 'logging.FileHandler',
+        'filename': os.path.join(LOG_DIR, 'django.log'),
+        'formatter': 'verbose',
     },
+    'console': {
+        'level': 'INFO',
+        'class': 'logging.StreamHandler',
+        'formatter': 'verbose',
+    },
+    'ml_file': {
+        'level': 'DEBUG',
+        'class': 'logging.FileHandler',
+        'filename': os.path.join(LOG_DIR, 'ml_pipeline.log'),
+        'formatter': 'verbose',
+    },
+},
     'loggers': {
         'django': {
             'handlers': ['console', 'file'],
