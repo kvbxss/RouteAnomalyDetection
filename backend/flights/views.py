@@ -59,6 +59,43 @@ class FlightViewSet(viewsets.ModelViewSet):
         serializer = AnomalyDetectionSerializer(anomalies, many=True)
         return Response(serializer.data)
 
+
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def by_hex(self, request):
+        """
+        Fetch live aircraft by Mode S hex ID(s).
+        Query param:
+        - hex: comma-separated list of hex codes (up to 1000)
+        """
+        api_key = os.environ.get("ADS_B_API_KEY")
+        hex_list = request.query_params.get("hex", "")
+        if not hex_list:
+            return Response({"error": "Provide at least one hex code."}, status=400)
+
+        hex_values = hex_list.split(",")[:1000]  # limit to 1000
+
+        try:
+            response = requests.get(
+                f"https://api.airplanes.live/hex/{','.join(hex_values)}",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            
+            ingestion = FlightDataIngestion(data_source=None)
+            processed = ingestion.ingest_live_data(data)
+
+            return Response({
+                "requested_hex": hex_values,
+                "fetched": len(data),
+                "processed": processed["processed_count"]
+            })
+
+        except requests.RequestException as e:
+            return Response({"error": str(e)}, status=400)
+    
     @action(detail=False, methods=['post'], parser_classes=[MultiPartParser], permission_classes=[CanManageFlightData])
     def upload_csv(self, request):
         """

@@ -14,11 +14,21 @@ export interface AnomalyMarker {
   confidence: number;
   flightId: string;
 }
+export interface LiveFlightMarker {
+  icao24: string;            // Mode S hex
+  callsign: string;
+  position: [number, number]; // [lng, lat]
+  altitude: number;
+  speed: number;
+  heading: number;
+}
+ 
 
 interface MapProps {
   center?: [number, number];
   zoom?: number;
   height?: string;
+  liveFlights?: LiveFlightMarker[]; // live flight markers
   route?: RoutePoint[]; // optional route as [lng,lat]
   anomalyMarkers?: AnomalyMarker[]; // anomaly markers
   onMarkerClick?: (anomaly: AnomalyMarker) => void; // callback when marker clicked
@@ -31,11 +41,12 @@ export default function Map({
   route,
   anomalyMarkers = [],
   onMarkerClick,
+  liveFlights = [],
 }: MapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
-
+  
   // Show helpful message if token is missing
   if (!MAPBOX_TOKEN) {
     return (
@@ -91,7 +102,7 @@ export default function Map({
 
   useEffect(() => {
     if (!containerRef.current) return;
-
+  
     mapboxgl.accessToken = MAPBOX_TOKEN;
     const map = new mapboxgl.Map({
       container: containerRef.current,
@@ -99,24 +110,24 @@ export default function Map({
       center,
       zoom,
     });
-
+  
     map.addControl(
       new mapboxgl.NavigationControl({ visualizePitch: true }),
       "top-right"
     );
     mapRef.current = map;
-
+  
+    // Track live flight markers
+    const liveFlightMarkersRef: mapboxgl.Marker[] = [];
+  
     map.on("load", () => {
-      // Add route if provided
+      // --- ROUTE ---
       if (route && route.length >= 2) {
         map.addSource("route", {
           type: "geojson",
           data: {
             type: "Feature",
-            geometry: {
-              type: "LineString",
-              coordinates: route,
-            },
+            geometry: { type: "LineString", coordinates: route },
             properties: {},
           },
         });
@@ -127,58 +138,45 @@ export default function Map({
           layout: { "line-join": "round", "line-cap": "round" },
           paint: { "line-color": "#2563eb", "line-width": 4 },
         });
-
-        // Add start and end markers for route
-        if (route.length > 0) {
-          // Start marker
-          new mapboxgl.Marker({ color: "#10b981" })
-            .setLngLat(route[0])
-            .setPopup(new mapboxgl.Popup().setHTML("<strong>Start</strong>"))
-            .addTo(map);
-
-          // End marker
-          if (route.length > 1) {
-            new mapboxgl.Marker({ color: "#ef4444" })
-              .setLngLat(route[route.length - 1])
-              .setPopup(new mapboxgl.Popup().setHTML("<strong>End</strong>"))
-              .addTo(map);
-          }
-        }
-
-        // Fit bounds to route
+  
+        // Start and End markers
+        new mapboxgl.Marker({ color: "#10b981" })
+          .setLngLat(route[0])
+          .setPopup(new mapboxgl.Popup().setHTML("<strong>Start</strong>"))
+          .addTo(map);
+  
+        new mapboxgl.Marker({ color: "#ef4444" })
+          .setLngLat(route[route.length - 1])
+          .setPopup(new mapboxgl.Popup().setHTML("<strong>End</strong>"))
+          .addTo(map);
+  
         const bounds = route.reduce(
           (b, [lng, lat]) => b.extend([lng, lat]),
           new mapboxgl.LngLatBounds(route[0], route[0])
         );
         map.fitBounds(bounds, { padding: 40, duration: 800 });
       }
-
-      // Add anomaly markers
+  
+      // --- ANOMALY MARKERS ---
       if (anomalyMarkers.length > 0) {
-        // Clear existing markers
         markersRef.current.forEach(marker => marker.remove());
         markersRef.current = [];
-
-        anomalyMarkers.forEach((anomaly) => {
-          const el = document.createElement('div');
-          el.className = 'anomaly-marker';
+  
+        anomalyMarkers.forEach(anomaly => {
+          const el = document.createElement("div");
+          el.className = "anomaly-marker";
           el.style.backgroundColor = getMarkerColor(anomaly.type);
-          el.style.width = '20px';
-          el.style.height = '20px';
-          el.style.borderRadius = '50%';
-          el.style.border = '2px solid white';
-          el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
-          el.style.cursor = 'pointer';
-          el.style.transition = 'transform 0.2s';
-
-          // Hover effect
-          el.addEventListener('mouseenter', () => {
-            el.style.transform = 'scale(1.2)';
-          });
-          el.addEventListener('mouseleave', () => {
-            el.style.transform = 'scale(1)';
-          });
-
+          el.style.width = "20px";
+          el.style.height = "20px";
+          el.style.borderRadius = "50%";
+          el.style.border = "2px solid white";
+          el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
+          el.style.cursor = "pointer";
+          el.style.transition = "transform 0.2s";
+  
+          el.addEventListener("mouseenter", () => (el.style.transform = "scale(1.2)"));
+          el.addEventListener("mouseleave", () => (el.style.transform = "scale(1)"));
+  
           const popupContent = `
             <div style="padding: 4px;">
               <strong>${anomaly.flightId}</strong><br/>
@@ -188,39 +186,67 @@ export default function Map({
               <small>Confidence: ${(anomaly.confidence * 100).toFixed(1)}%</small>
             </div>
           `;
-
+  
           const marker = new mapboxgl.Marker({ element: el })
             .setLngLat(anomaly.position)
             .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(popupContent))
             .addTo(map);
-
-          // Click handler
-          if (onMarkerClick) {
-            el.addEventListener('click', () => {
-              onMarkerClick(anomaly);
-            });
-          }
-
+  
+          if (onMarkerClick) el.addEventListener("click", () => onMarkerClick(anomaly));
+  
           markersRef.current.push(marker);
         });
-
-        // If no route, fit bounds to markers
+  
         if (!route || route.length === 0) {
           const bounds = new mapboxgl.LngLatBounds();
           anomalyMarkers.forEach(a => bounds.extend(a.position));
           map.fitBounds(bounds, { padding: 60, duration: 800 });
         }
       }
+  
+      // --- LIVE FLIGHTS ---
+      if (liveFlights && liveFlights.length > 0) {
+        // Remove old markers
+        liveFlightMarkersRef.forEach(marker => marker.remove());
+        liveFlightMarkersRef.length = 0;
+  
+        liveFlights.forEach(flight => {
+          const el = document.createElement("div");
+          el.className = "live-flight-marker";
+          el.style.width = "18px";
+          el.style.height = "18px";
+          el.style.backgroundColor = "#3b82f6"; // blue
+          el.style.borderRadius = "50%";
+          el.style.border = "2px solid white";
+          el.style.boxShadow = "0 1px 3px rgba(0,0,0,0.3)";
+          el.style.transform = `rotate(${flight.heading}deg)`;
+  
+          const marker = new mapboxgl.Marker({ element: el })
+            .setLngLat(flight.position)
+            .setPopup(
+              new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                <strong>${flight.callsign}</strong><br/>
+                Alt: ${flight.altitude} ft<br/>
+                Speed: ${flight.speed} kt<br/>
+                Hex: ${flight.icao24}
+              `)
+            )
+            .addTo(map);
+  
+          liveFlightMarkersRef.push(marker);
+        });
+      }
     });
-
+  
     return () => {
-      // Clean up markers
       markersRef.current.forEach(marker => marker.remove());
       markersRef.current = [];
+      liveFlightMarkersRef.forEach(marker => marker.remove());
+      liveFlightMarkersRef.length = 0;
       map.remove();
     };
-  }, [center[0], center[1], zoom, route, anomalyMarkers, onMarkerClick]);
-
+  }, [center[0], center[1], zoom, route, anomalyMarkers, liveFlights, onMarkerClick]);
+  
   return (
     <div className="relative">
       <div ref={containerRef} style={{ width: "100%", height }} />

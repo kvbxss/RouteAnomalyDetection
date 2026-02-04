@@ -167,6 +167,11 @@ export function isAuthenticated(): boolean {
   return getAccessToken() !== null;
 }
 
+export async function fetchFlightsByHex(hexCodes: string[]) {
+  const hexParam = hexCodes.join(",");
+  return getJSON(`/api/flights/by_hex/?hex=${hexParam}`);
+}
+
 // ML Operations
 export function trainModel(opts: {
   contamination?: number;
