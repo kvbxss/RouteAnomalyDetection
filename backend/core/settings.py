@@ -286,6 +286,8 @@ if not DEBUG:
         r"^https://.*\.vercel\.app$",
     ]
 
+APPEND_SLASH = False
+
 CORS_ALLOW_CREDENTIALS = True
 
 # Logging configuration
