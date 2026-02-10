@@ -123,7 +123,7 @@ export default function Map({
       return;
     }
 
-    const geojson = {
+    const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
       type: "Feature",
       geometry: { type: "LineString", coordinates: route },
       properties: {},
