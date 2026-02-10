@@ -7,6 +7,9 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 from django.utils import timezone
 import logging
+import os
+import requests
+import time
 from .models import Flight, AnomalyDetection, DataSource
 from .serializers import FlightSerializer, AnomalyDetectionSerializer, DataSourceSerializer
 from .utils import FlightDataIngestion, CSVDataParser
@@ -14,6 +17,7 @@ from .ml_pipeline import AnomalyDetectionModel, AnomalyDetectionPipeline
 from .permissions import IsAdminOrReadOnly, CanManageFlightData, CanRunMLOperations
 
 logger = logging.getLogger(__name__)
+_ADSB_CACHE = {"ts": 0.0, "key": None, "payload": None}
 
 
 class FlightViewSet(viewsets.ModelViewSet):
@@ -94,6 +98,97 @@ class FlightViewSet(viewsets.ModelViewSet):
             })
 
         except requests.RequestException as e:
+            return Response({"error": str(e)}, status=400)
+
+    @action(
+        detail=False,
+        methods=['get'],
+        permission_classes=[AllowAny],
+        authentication_classes=[],
+    )
+    def live_adsb(self, request):
+        """
+        Fetch live ADS-B aircraft near a point.
+
+        Query params:
+        - lat: center latitude (default: 40.0)
+        - lon: center longitude (default: -95.0)
+        - radius: radius in NM (default: 250, max 250)
+        - limit: max aircraft to return (default: 100, max 1000)
+        - europe_only: filter to Europe bounding box (default: false)
+        """
+        try:
+            lat = float(request.query_params.get("lat", 40.0))
+            lon = float(request.query_params.get("lon", -95.0))
+            radius = float(request.query_params.get("radius", 250))
+            limit = int(request.query_params.get("limit", 100))
+        except ValueError:
+            return Response({"error": "Invalid lat/lon/radius/limit values."}, status=400)
+
+        radius = min(max(radius, 1), 250)
+        limit = min(max(limit, 1), 1000)
+        europe_only = request.query_params.get("europe_only", "false").lower() in {"1", "true", "yes"}
+
+        cache_key = f"{lat}:{lon}:{radius}:{limit}"
+        now = time.time()
+        if _ADSB_CACHE["key"] == cache_key and now - _ADSB_CACHE["ts"] < 1.1:
+            return Response(_ADSB_CACHE["payload"])
+
+        try:
+            response = requests.get(
+                f"https://api.airplanes.live/v2/point/{lat}/{lon}/{radius}",
+                headers={"User-Agent": "RouteAnomalyDetection/1.0"},
+                timeout=10,
+            )
+            if not response.ok:
+                logger.error(
+                    "ADS-B upstream error %s: %s",
+                    response.status_code,
+                    response.text[:1000],
+                )
+                return Response(
+                    {
+                        "error": "Upstream API error",
+                        "status_code": response.status_code,
+                        "details": response.text[:1000],
+                    },
+                    status=502,
+                )
+            payload = response.json()
+
+            aircraft = payload.get("ac", []) or []
+            results = []
+            for a in aircraft:
+                last_pos = a.get("lastPosition") or {}
+                lat_val = a.get("lat", last_pos.get("lat"))
+                lon_val = a.get("lon", last_pos.get("lon"))
+                if lat_val is None or lon_val is None:
+                    continue
+                if europe_only:
+                    if not (34.0 <= lat_val <= 71.0 and -25.0 <= lon_val <= 45.0):
+                        continue
+
+                results.append({
+                    "icao24": a.get("hex", ""),
+                    "callsign": (a.get("flight") or "").strip(),
+                    "position": [lon_val, lat_val],
+                    "altitude": a.get("alt_baro") or a.get("alt_geom") or 0,
+                    "speed": a.get("gs") or a.get("tas") or 0,
+                    "heading": a.get("track") or a.get("true_heading") or 0,
+                })
+
+                if len(results) >= limit:
+                    break
+
+            payload_out = {
+                "count": len(results),
+                "center": {"lat": lat, "lon": lon, "radius_nm": radius},
+                "aircraft": results,
+            }
+            _ADSB_CACHE.update({"ts": now, "key": cache_key, "payload": payload_out})
+            return Response(payload_out)
+        except requests.RequestException as e:
+            logger.error("ADS-B fetch failed: %s", e)
             return Response({"error": str(e)}, status=400)
     
     @action(detail=False, methods=['post'], parser_classes=[MultiPartParser], permission_classes=[CanManageFlightData])
